@@ -43,3 +43,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Error saving seat' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    const { row, number, section, block } = body;
+    
+    await prisma.seat.delete({
+      where: {
+        row_number_section_block: {
+          row,
+          number,
+          section,
+          block,
+        },
+      },
+    });
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting seat:', error);
+    return NextResponse.json({ error: 'Error deleting seat' }, { status: 500 });
+  }
+}
