@@ -1,0 +1,445 @@
+"use client"
+import {
+    Box,
+    Button,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Paper,
+    TextField,
+    Tooltip,
+    Typography,
+} from '@mui/material';
+import { Seat as SeatDbProps } from '@prisma/client';
+import { useEffect, useState } from 'react';
+
+// Define types for section configuration
+type SectionConfig = {
+  [key: string]: {
+    rows: string[];
+    blocks: {
+      [key: string]: {
+        seatsPerRow: {
+          [key: string]: number;
+        };
+      };
+    };
+  };
+};
+
+// Configuration for each section and block
+const sectionConfig: SectionConfig = {
+  gold: {
+    rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'],
+    blocks: {
+      left: {
+        seatsPerRow: {
+          A: 15, B: 15, C: 16, D: 21, E: 22, F: 22,
+          G: 23, H: 23, I: 23, J: 23, K: 23, L: 23
+        }
+      },
+      center: {
+        seatsPerRow: {
+          A: 12, B: 12, C: 14, D: 16, E: 18, F: 18,
+          G: 20, H: 21, I: 22, J: 22, K: 22, L: 23
+        }
+      },
+      right: {
+        seatsPerRow: {
+          A: 16, B: 16, C: 16, D: 23, E: 23, F: 23,
+          G: 23, H: 23, I: 23, J: 23, K: 23, L: 23
+        }
+      }
+    }
+  },
+  silver: {
+    rows: ['M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'],
+    blocks: {
+      left: { 
+        seatsPerRow: {
+          M: 21, N: 21, O: 20, P: 18, Q: 16, R: 15,
+          S: 13, T: 11, U: 8, V: 6, W: 3
+        }
+      },
+      center: { 
+        seatsPerRow: {
+          M: 11, N: 12, O: 12, P: 12, Q: 13, R: 13,
+          S: 14, T: 14, U: 14, V: 14, W: 6
+        }
+      },
+      centeragain: { 
+        seatsPerRow: {
+          M: 11, N: 12, O: 12, P: 12, Q: 13, R: 13,
+          S: 14, T: 14, U: 14, V: 14, W: 0
+        }
+      },
+      right: { 
+        seatsPerRow: {
+          M: 20, N: 20, O: 20, P: 20, Q: 18, R: 16,
+          S: 14, T: 12, U: 8, V: 6, W: 5
+        }
+      }
+    }
+  },
+  bronze: {
+    rows: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+    blocks: {
+      left: { 
+        seatsPerRow: {
+          A: 15, B: 14, C: 13, D: 12, E: 11, F: 8, G: 8
+        }
+      },
+      center: { 
+        seatsPerRow: {
+          A: 25, B: 25, C: 25, D: 25, E: 25, F: 22, G: 14
+        }
+      },
+      right: { 
+        seatsPerRow: {
+          A: 15, B: 14, C: 13, D: 12, E: 11, F: 8, G: 8
+        }
+      }
+    }
+  }
+};
+
+type SeatProps = {
+    row: string;
+    number: number;
+    section: string;
+    block: string;
+    occupied: string;
+    onSeatClick: (row: string, number: number, section: string, block: string) => void;
+};
+const Seat = ({ row, number, section, block, occupied, onSeatClick }:SeatProps) => {
+  return (
+    <Tooltip title={occupied || 'Available'}>
+      <Box
+        component="button"
+        sx={{
+          width: 16,
+          height: 16,
+          borderRadius: '50%',
+          border: '1px solid #666',
+          backgroundColor: occupied ? '#FFA500' : '#90EE90',
+          m: 0.25,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 0,
+          '&:hover': {
+            opacity: 0.8,
+          },
+        }}
+        onClick={() => onSeatClick(row, number, section, block)}
+      >
+        <Typography variant="caption" sx={{ fontSize: '6px', lineHeight: 1 }}>
+          {number}
+        </Typography>
+      </Box>
+    </Tooltip>
+  );
+};
+
+type SeatBlockProps = {
+    block: {
+        seatsPerRow: number | Record<string, number>;
+    };
+    row: string;
+    section: string;
+    blockType: string;
+    startNumber: number;
+    occupiedSeats: Record<string, string>;
+    onSeatClick: (row: string, number: number, section: string, block: string) => void;
+    align?: string;
+    width?: string;
+};
+
+const SeatBlock = ({  block, row, section, blockType, startNumber, occupiedSeats, onSeatClick, align, width }:SeatBlockProps) => {
+  if(!block) return null;
+  const seatsCount = typeof sectionConfig[section].blocks[blockType].seatsPerRow === 'object'
+    ? sectionConfig[section].blocks[blockType].seatsPerRow[row]
+    : sectionConfig[section].blocks[blockType].seatsPerRow;
+
+
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'nowrap', width: width, justifyContent: align || 'center' }}>
+      {[...Array(seatsCount)].map((_, idx) => (
+        <Seat
+          key={`${section}-${blockType}-${row}-${startNumber + idx}`}
+          row={row}
+          number={startNumber + idx}
+          section={section}
+          block={blockType}
+          occupied={occupiedSeats[`${section}-${row}-${startNumber + idx}-${blockType}`]}
+          onSeatClick={onSeatClick}
+        />
+      ))}
+    </Box>
+  );
+};
+
+type SeatRowProps = {
+    row: string;
+    section: string;
+    occupiedSeats: Record<string, string>;
+    onSeatClick: (row: string, number: number, section: string, block: string) => void;
+};
+
+const SeatRow = ({ row, section, occupiedSeats, onSeatClick }: SeatRowProps) => {
+  // Calculate starting numbers for each block
+  const leftSeats = typeof sectionConfig[section].blocks.left.seatsPerRow === 'object'
+    ? sectionConfig[section].blocks.left.seatsPerRow[row]
+    : sectionConfig[section].blocks.left.seatsPerRow;
+    
+  const centerSeats = typeof sectionConfig[section].blocks.center.seatsPerRow === 'object'
+    ? sectionConfig[section].blocks.center.seatsPerRow[row]
+    : sectionConfig[section].blocks.center.seatsPerRow;
+
+  const secondCenterSeats = typeof sectionConfig[section].blocks.centeragain?.seatsPerRow === 'object' ? sectionConfig[section].blocks.centeragain.seatsPerRow[row] : 0;
+
+  const centerStart = leftSeats + 1;
+  const secondCenterStart = centerStart + centerSeats;
+  const rightStart = centerStart + centerSeats + secondCenterSeats;
+
+  let centerWidthOne = '33%'
+  let centerWidthTwo = '0%'
+  if(secondCenterSeats >0){
+    centerWidthOne = '16%';
+    centerWidthTwo = '16%';
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+      <Typography sx={{ width: 20, mr: 1, fontSize: '0.75rem' }}>{row}</Typography>
+      <Box sx={{ display: 'flex', gap: 2, flex: 1, justifyContent: 'space-between' }}>
+        <SeatBlock
+          block={sectionConfig[section].blocks.left}
+          row={row}
+          section={section}
+          blockType="left"
+          startNumber={1}
+          occupiedSeats={occupiedSeats}
+          onSeatClick={onSeatClick}
+          align='flex-end'
+          width='33%'
+        />
+        <SeatBlock
+          block={sectionConfig[section].blocks.center}
+          row={row}
+          section={section}
+          blockType="center"
+          startNumber={centerStart}
+          occupiedSeats={occupiedSeats}
+          onSeatClick={onSeatClick}
+          align={secondCenterSeats > 0 ? 'flex-end' : 'center'}
+          width={centerWidthOne}
+        />
+        <SeatBlock
+            block={sectionConfig[section].blocks.centeragain}
+            row={row}
+            section={section}
+            blockType="centeragain"
+            startNumber={secondCenterStart}
+            occupiedSeats={occupiedSeats}
+            onSeatClick={onSeatClick}
+            align='flex-start'
+            width={centerWidthTwo}
+            />
+        <SeatBlock
+          block={sectionConfig[section].blocks.right}
+          row={row}
+          section={section}
+          blockType="right"
+          startNumber={rightStart}
+          occupiedSeats={occupiedSeats}
+          onSeatClick={onSeatClick}
+          align='flex-start'
+          width='33%'
+        />
+      </Box>
+      <Typography sx={{ width: 20, ml: 1, fontSize: '0.75rem' }}>{row}</Typography>
+    </Box>
+  );
+};
+type SectionProps = {
+    title: string;
+    config: {
+        rows: string[];
+        blocks: {
+            [key: string]: {
+                seatsPerRow: {
+                    [key: string]: number;
+                };
+            };
+        };
+    };
+    occupiedSeats: Record<string, string>;
+    onSeatClick: (row: string, number: number, section: string, block: string) => void;
+};
+const Section = ({ title, config, occupiedSeats, onSeatClick }:SectionProps) => {
+  return (
+    <Box sx={{ mb: 4 }}>
+      <Typography 
+        variant="h6" 
+        sx={{ 
+          mb: 2, 
+          color: title === 'Gold' ? '#DAA520' : 
+                 title === 'Silver' ? '#C0C0C0' : 
+                 '#CD7F32',
+          fontSize: '1rem'
+        }}
+      >
+        {title} {title === 'Gold' ? '724' : title === 'Silver' ? '570' : '323'} seats
+      </Typography>
+      {config.rows.map((row) => (
+        <SeatRow
+          key={`${title}-${row}`}
+          row={row}
+          section={title.toLowerCase()}
+          occupiedSeats={occupiedSeats}
+          onSeatClick={onSeatClick}
+        />
+      ))}
+    </Box>
+  );
+};
+
+const TheaterLayout = () => {
+  const [occupiedSeats, setOccupiedSeats] = useState<Record<string, string>>({});
+  const [dialogOpen, setDialogOpen] = useState(false);
+  type SelectedSeat = {
+    row: string;
+    number: number;
+    section: string;
+    block: string;
+  };
+  
+  const [selectedSeat, setSelectedSeat] = useState<SelectedSeat | null>(null);
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+    fetchOccupiedSeats();
+  }, []);
+
+  const fetchOccupiedSeats = async () => {
+    try {
+      const response = await fetch('/api/seats');
+      const data = await response.json();
+      const occupied: Record<string, string> = {};
+      data.forEach((seat:SeatDbProps) => {
+        occupied[`${seat.section}-${seat.row}-${seat.number}-${seat.block}`] = seat.name || '';
+      });
+      setOccupiedSeats(occupied);
+    } catch (error) {
+      console.error('Error fetching seats:', error);
+    }
+  };
+
+  const handleSeatClick = (row: string, number: number, section: string, block: string) => {
+    setSelectedSeat({ row, number, section, block });
+    setName(occupiedSeats[`${section}-${row}-${number}-${block}`] || '');
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      await fetch('/api/seats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          row: selectedSeat?.row,
+          number: selectedSeat?.number,
+          section: selectedSeat?.section,
+          block: selectedSeat?.block,
+          name: name || null,
+        }),
+      });
+      
+      await fetchOccupiedSeats();
+      setDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving seat:', error);
+    }
+  };
+
+  return (
+    <Box sx={{ p: 1}}>
+      <Box sx={{ mb: 4, textAlign: 'center' }}>
+        <Paper
+          elevation={1}
+          sx={{
+            width: '80%',
+            mx: 'auto',
+            p: 1,
+            border: '1px solid black',
+          }}
+        >
+          <Typography variant="h6">Stage</Typography>
+        </Paper>
+      </Box>
+
+      <Section
+        title="Gold"
+        config={sectionConfig.gold}
+        occupiedSeats={occupiedSeats}
+        onSeatClick={handleSeatClick}
+      />
+      
+      <Section
+        title="Silver"
+        config={sectionConfig.silver}
+        occupiedSeats={occupiedSeats}
+        onSeatClick={handleSeatClick}
+      />
+
+      <Box sx={{ textAlign: 'center', my: 2 }}>
+        <Box sx={{ display: 'inline-flex', gap: 4 }}>
+          <Paper elevation={1} sx={{ p: 1, minWidth: 100 }}>
+            <Typography>CONTROL AREA</Typography>
+          </Paper>
+          <Paper elevation={1} sx={{ p: 1, minWidth: 100 }}>
+            <Typography>SOUND MIXER</Typography>
+          </Paper>
+        </Box>
+      </Box>
+
+      <Typography sx={{ textAlign: 'center', my: 2 }}>Next Level</Typography>
+      
+      <Section
+        title="Bronze"
+        config={sectionConfig.bronze}
+        occupiedSeats={occupiedSeats}
+        onSeatClick={handleSeatClick}
+      />
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
+        <DialogTitle>
+          Edit Seat {selectedSeat?.row}-{selectedSeat?.number}
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Name"
+            fullWidth
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSave} variant="contained">
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default TheaterLayout;
