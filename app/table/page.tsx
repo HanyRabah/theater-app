@@ -2,25 +2,27 @@
 
 import { Clear as ClearIcon, FileDownload as FileDownloadIcon } from '@mui/icons-material';
 import {
-    Box,
-    Button,
-    FormControl,
-    IconButton,
-    InputLabel,
-    MenuItem,
-    Paper,
-    Select,
-    Stack,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TablePagination,
-    TableRow,
-    TextField,
-    Tooltip,
-    Typography,
+  Alert,
+  Box,
+  Button,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Snackbar,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+  TextField,
+  Tooltip,
+  Typography,
 } from '@mui/material';
 import debounce from 'lodash/debounce';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -41,8 +43,13 @@ interface Filters {
   block: string;
   occupancyStatus: string;
 }
+interface SnackbarMessage {
+  message: string;
+  severity: 'success' | 'error';
+}
 
-const DEBOUNCE_DELAY = 500; 
+
+const DEBOUNCE_DELAY = 1000; 
 
 const getSectionColor = (section: string) => {
   switch (section.toLowerCase()) {
@@ -105,6 +112,7 @@ const SeatTable = () => {
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [occupiedSeats, setOccupiedSeats] = useState<{[key: string]: string}>({});
   const [pendingUpdates, setPendingUpdates] = useState<{[key: string]: string}>({});
+  const [snackbar, setSnackbar] = useState<SnackbarMessage | null>(null);
 
   const [filters, setFilters] = useState<Filters>({
     section: '',
@@ -118,19 +126,8 @@ const SeatTable = () => {
     blocks: [],
   });
 
-  useEffect(() => {
-    const allPossibleSeats = generateAllSeats();
-    setSeats(allPossibleSeats);
-    setFilteredSeats(allPossibleSeats);
-    setUniqueValues(getAllUniqueValues(allPossibleSeats));
-    fetchOccupiedSeats();
-  }, []);
 
-  useEffect(() => {
-    applyFilters();
-  }, [filters, occupiedSeats, seats]);
-
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...seats];
 
     if (filters.section) {
@@ -152,7 +149,7 @@ const SeatTable = () => {
 
     setFilteredSeats(filtered);
     setPage(0);
-  };
+  }, [filters, occupiedSeats, seats]);
 
   const fetchOccupiedSeats = async () => {
     try {
@@ -178,8 +175,7 @@ const SeatTable = () => {
     setPage(0);
   };
 
-  const debouncedApiCall = useCallback(
-    debounce(async (seat: Seat, newName: string) => {
+  const debouncedApiCall = useCallback(debounce(async (seat: Seat, newName: string) => {
       try {
         const response = await fetch('/api/seats', {
           method: 'POST',
@@ -192,9 +188,15 @@ const SeatTable = () => {
           }),
         });
 
+        
         if (!response.ok) {
           throw new Error('Failed to update seat');
         }
+
+        setSnackbar({
+          message: `Successfully ${newName ? 'assigned' : 'removed'} name for seat ${seat.row}-${seat.number}`,
+          severity: 'success'
+        });
 
         const key = `${seat.section}-${seat.row}-${seat.number}-${seat.block}`;
         setOccupiedSeats(prev => ({
@@ -210,7 +212,10 @@ const SeatTable = () => {
         });
       } catch (error) {
         console.error('Error updating seat:', error);
-        
+          setSnackbar({
+            message: `Failed to update seat ${seat.row}-${seat.number}`,
+            severity: 'error'
+          });
         // Revert the pending update on error
         const key = `${seat.section}-${seat.row}-${seat.number}-${seat.block}`;
         setPendingUpdates(prev => {
@@ -226,9 +231,7 @@ const SeatTable = () => {
           return next;
         });
       }
-    }, DEBOUNCE_DELAY),
-    [] // Empty dependency array since we don't want to recreate the debounced function
-  );
+    }, DEBOUNCE_DELAY), []);
 
   const handleNameChange = async (seat: Seat, newName: string) => {
         const key = `${seat.section}-${seat.row}-${seat.number}-${seat.block}`;
@@ -265,7 +268,18 @@ const SeatTable = () => {
     });
   };
 
-    // Cancel pending API calls when component unmounts
+    useEffect(() => {
+    const allPossibleSeats = generateAllSeats();
+    setSeats(allPossibleSeats);
+    setFilteredSeats(allPossibleSeats);
+    setUniqueValues(getAllUniqueValues(allPossibleSeats));
+    fetchOccupiedSeats();
+  }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
   useEffect(() => {
     return () => {
       debouncedApiCall.cancel();
@@ -429,6 +443,22 @@ const SeatTable = () => {
           onRowsPerPageChange={handleChangeRowsPerPage}
         />
       </Paper>
+      {snackbar &&
+        <Snackbar
+          open={!!snackbar}
+          autoHideDuration={3000}
+          onClose={() => setSnackbar(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert 
+            onClose={() => setSnackbar(null)} 
+            severity={snackbar.severity}
+            sx={{ width: '100%' }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      }
     </Box>
   );
 };
