@@ -1,3 +1,5 @@
+// api/seats/route.ts
+import { sendUpdateToClients } from '@/app/lib/sse';
 import { PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
 
@@ -15,6 +17,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    
+    if (!body.row || !body.number || !body.section || !body.block) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
     const { row, number, section, block, name } = body;
     
     const seat = await prisma.seat.upsert({
@@ -37,10 +47,20 @@ export async function POST(request: Request) {
         name,
       },
     });
-    
-    return NextResponse.json(seat);
-  } catch {
-    return NextResponse.json({ error: 'Error saving seat' }, { status: 500 });
+
+    // Send update to all connected clients
+    await sendUpdateToClients({
+      type: 'SEAT_UPDATE',
+      seat
+    });
+
+    return NextResponse.json({ success: true, seat });
+  } catch (error) {
+    console.error('Error in POST:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
   }
 }
 
@@ -49,7 +69,7 @@ export async function DELETE(request: Request) {
     const body = await request.json();
     const { row, number, section, block } = body;
     
-    await prisma.seat.delete({
+   const deletedSeat = await prisma.seat.delete({
       where: {
         row_number_section_block: {
           row,
@@ -58,6 +78,12 @@ export async function DELETE(request: Request) {
           block,
         },
       },
+    });
+
+    // Send update for deletion
+    sendUpdateToClients({
+      type: 'SEAT_UPDATE',
+      seat: { ...deletedSeat, name: null }
     });
     
     return NextResponse.json({ success: true });
