@@ -13,21 +13,10 @@ import {
 	Tooltip,
 	Typography,
 } from "@mui/material";
-import { Seat, Seat as SeatDbProps } from "@prisma/client";
+import { Seat as SeatDbProps } from "@prisma/client";
 import { useEffect, useState } from "react";
 import { sectionConfig } from "../config/sectionConfig";
 import { pusherClient } from "../lib/pusher";
-
-type SSEMessage = {
-	type: "SEAT_UPDATE";
-	seat: {
-		section: string;
-		row: string;
-		number: number;
-		block: string;
-		name: string | null;
-	};
-};
 
 type SeatProps = {
 	row: string;
@@ -260,7 +249,6 @@ const TheaterLayout = () => {
 		message: string;
 		severity: "success" | "error" | "info" | "warning";
 	} | null>(null);
-	const [, setPendingUpdates] = useState<{ [key: string]: string }>({});
 
 	const fetchOccupiedSeats = async () => {
 		try {
@@ -328,7 +316,7 @@ const TheaterLayout = () => {
 	useEffect(() => {
 		const channel = pusherClient.subscribe("seats-channel");
 
-		channel.bind("seat-update", (data: { type: "SEAT_UPDATE"; seat: Seat }) => {
+		channel.bind("seat-update", (data: { type: "SEAT_UPDATE"; seat: SeatDbProps }) => {
 			if (data.type === "SEAT_UPDATE") {
 				const updatedSeat = data.seat;
 				const key = `${updatedSeat.section}-${updatedSeat.row}-${updatedSeat.number}-${updatedSeat.block}`;
