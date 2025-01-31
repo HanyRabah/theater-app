@@ -1,5 +1,5 @@
 // api/seats/route.ts
-import { sendUpdateToClients } from "@/app/lib/sse";
+import { pusherServer } from "@/app/lib/pusher";
 import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 		});
 
 		// Send update to all connected clients
-		await sendUpdateToClients({
+		await pusherServer.trigger("seats-channel", "seat-update", {
 			type: "SEAT_UPDATE",
 			seat,
 		});
@@ -63,7 +63,7 @@ export async function DELETE(request: Request) {
 		const body = await request.json();
 		const { row, number, section, block } = body;
 
-		const deletedSeat = await prisma.seat.delete({
+		await prisma.seat.delete({
 			where: {
 				row_number_section_block: {
 					row,
@@ -75,10 +75,10 @@ export async function DELETE(request: Request) {
 		});
 
 		// Send update for deletion
-		sendUpdateToClients({
-			type: "SEAT_UPDATE",
-			seat: { ...deletedSeat, name: null },
-		});
+		// sendUpdateToClients({
+		// 	type: "SEAT_UPDATE",
+		// 	seat: { ...deletedSeat, name: null },
+		// });
 
 		return NextResponse.json({ success: true });
 	} catch (error) {

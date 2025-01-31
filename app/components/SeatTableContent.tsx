@@ -29,17 +29,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import React, { useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { sectionConfig } from "../config/sectionConfig";
+import { pusherClient } from "../lib/pusher";
 
-type SSEMessage = {
-	type: "SEAT_UPDATE";
-	seat: {
-		section: string;
-		row: string;
-		number: number;
-		block: string;
-		name: string | null;
-	};
-};
 interface Seat {
 	section: string;
 	row: string;
@@ -280,6 +271,10 @@ const SeatTableContent = () => {
 					throw new Error("Failed to update seat");
 				}
 
+				setSnackbar({
+					message: `seat ${seat.row}-${seat.number} Updated successfully`,
+					severity: "success",
+				});
 				// Don't update local state here - let SSE handle it
 				setPendingUpdates(prev => {
 					const next = { ...prev };
@@ -358,86 +353,32 @@ const SeatTableContent = () => {
 	}, [debouncedApiCall]);
 
 	useEffect(() => {
-		let retryTimeout: NodeJS.Timeout;
+		const channel = pusherClient.subscribe("seats-channel");
 
-		const connectSSE = () => {
-			try {
-				const sse = new EventSource("/api/seats/updates");
+		channel.bind("seat-update", (data: { type: "SEAT_UPDATE"; seat: Seat }) => {
+			if (data.type === "SEAT_UPDATE") {
+				const updatedSeat = data.seat;
+				const key = `${updatedSeat.section}-${updatedSeat.row}-${updatedSeat.number}-${updatedSeat.block}`;
 
-				sse.onopen = () => {
-					console.log("SSE connection opened");
-					// Refresh data when connection is established
-					fetchOccupiedSeats();
-				};
-
-				sse.onmessage = event => {
-					try {
-						if (event.data === "keepalive") return;
-
-						const data = JSON.parse(event.data) as SSEMessage;
-						if (data.type === "SEAT_UPDATE" && data.seat) {
-							const updatedSeat = data.seat;
-							const key = `${updatedSeat.section}-${updatedSeat.row}-${updatedSeat.number}-${updatedSeat.block}`;
-
-							setOccupiedSeats(prev => {
-								const next = { ...prev };
-								if (updatedSeat.name) {
-									next[key] = updatedSeat.name;
-								} else {
-									delete next[key];
-								}
-								return next;
-							});
-
-							// Clear any pending updates for this seat
-							setPendingUpdates(prev => {
-								const next = { ...prev };
-								delete next[key];
-								return next;
-							});
-
-							if (!updatedSeat.name) {
-								// If name is null, it means the seat was cleared
-								setSnackbar({
-									message: `Seat ${updatedSeat.row}-${updatedSeat.number} was cleared`,
-									severity: "info",
-								});
-							} else {
-								setSnackbar({
-									message: `Seat ${updatedSeat.row}-${updatedSeat.number} was updated`,
-									severity: "info",
-								});
-							}
-						}
-					} catch (error) {
-						console.error("Error processing SSE message:", error);
+				setOccupiedSeats(prev => {
+					const next = { ...prev };
+					if (updatedSeat.name) {
+						next[key] = updatedSeat.name;
+					} else {
+						delete next[key];
 					}
-				};
+					return next;
+				});
 
-				sse.onerror = error => {
-					console.error("SSE Error:", error);
-					sse.close();
-					// Try to reconnect after a delay
-					retryTimeout = setTimeout(connectSSE, 5000);
-				};
-
-				return sse;
-			} catch (error) {
-				console.error("Error creating SSE connection:", error);
-				retryTimeout = setTimeout(connectSSE, 5000);
-				return null;
+				setSnackbar({
+					message: `Seat ${updatedSeat.row}-${updatedSeat.number} was updated`,
+					severity: "info",
+				});
 			}
-		};
-
-		const sse = connectSSE();
+		});
 
 		return () => {
-			if (sse) {
-				sse.close();
-			}
-			if (retryTimeout) {
-				clearTimeout(retryTimeout);
-			}
+			pusherClient.unsubscribe("seats-channel");
 		};
 	}, []);
 	return (
@@ -598,17 +539,15 @@ const SeatTableContent = () => {
 					onRowsPerPageChange={handleChangeRowsPerPage}
 				/>
 			</Paper>
-			{snackbar && (
-				<Snackbar
-					open={!!snackbar}
-					autoHideDuration={3000}
-					onClose={() => setSnackbar(null)}
-					anchorOrigin={{ vertical: "bottom", horizontal: "right" }}>
-					<Alert onClose={() => setSnackbar(null)} severity={snackbar.severity} sx={{ width: "100%" }}>
-						{snackbar.message}
-					</Alert>
-				</Snackbar>
-			)}
+			<Snackbar
+				open={!!snackbar}
+				autoHideDuration={3000}
+				onClose={() => setSnackbar(null)}
+				anchorOrigin={{ vertical: "bottom", horizontal: "right" }}>
+				<Alert onClose={() => setSnackbar(null)} severity={snackbar?.severity} sx={{ width: "100%" }}>
+					{snackbar?.message}
+				</Alert>
+			</Snackbar>
 		</Box>
 	);
 };
