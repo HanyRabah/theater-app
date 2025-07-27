@@ -253,6 +253,7 @@ const TheaterLayout = () => {
 	const fetchOccupiedSeats = async () => {
 		try {
 			const response = await fetch("/api/seats");
+			console.log("🚀 ~ fetchOccupiedSeats ~ response:", response)
 			const data = await response.json();
 			const occupied: Record<string, string> = {};
 			data.forEach((seat: SeatDbProps) => {
